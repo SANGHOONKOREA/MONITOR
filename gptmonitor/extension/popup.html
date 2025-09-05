@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChatGPT Monitor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 380px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .container {
+            padding: 20px;
+        }
+
+        .header {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            position: relative;
+        }
+
+        .header h1 {
+            font-size: 20px;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .browser-badge {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+
+        .browser-badge.chrome {
+            background: #4285f4;
+            color: white;
+        }
+
+        .browser-badge.edge {
+            background: #0078d7;
+            color: white;
+        }
+
+        .user-info {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 18px;
+        }
+
+        .user-name {
+            flex: 1;
+            font-weight: 500;
+            color: #333;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 8px;
+            padding: 12px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: #666;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            font-size: 22px;
+            font-weight: bold;
+            color: #764ba2;
+        }
+
+        .stat-unit {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .today-section {
+            background: white;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .today-section h3 {
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .today-stats {
+            display: flex;
+            justify-content: space-around;
+            text-align: center;
+        }
+
+        .today-stat {
+            flex: 1;
+        }
+
+        .today-stat-value {
+            font-size: 18px;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .today-stat-label {
+            font-size: 10px;
+            color: #666;
+            margin-top: 2px;
+        }
+
+        /* 브라우저별 통계 섹션 */
+        .browser-section {
+            background: white;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .browser-tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .browser-tab {
+            padding: 6px 12px;
+            border: none;
+            background: none;
+            color: #666;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .browser-tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .browser-content {
+            display: none;
+        }
+
+        .browser-content.active {
+            display: block;
+        }
+
+        .browser-stat-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            font-size: 12px;
+        }
+
+        .browser-stat-label {
+            color: #666;
+        }
+
+        .browser-stat-value {
+            font-weight: bold;
+            color: #333;
+        }
+
+        .buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: white;
+            color: #764ba2;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.9);
+            color: #666;
+        }
+
+        .btn-secondary:hover {
+            background: white;
+        }
+
+        .sync-status {
+            margin-top: 10px;
+            padding: 8px;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 6px;
+            font-size: 11px;
+            color: #666;
+            text-align: center;
+        }
+
+        .sync-status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: white;
+        }
+
+        .setup-view {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .setup-view h2 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        .setup-view input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+        .setup-view button {
+            width: 100%;
+            padding: 10px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        .setup-view button:hover {
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 로딩 화면 -->
+        <div id="loadingView" class="loading">
+            로딩 중...
+        </div>
+
+        <!-- 설정 화면 -->
+        <div id="setupView" class="setup-view" style="display: none;">
+            <h2>사용자 등록</h2>
+            <p style="margin-bottom: 15px; color: #666; font-size: 12px;">
+                모니터링을 시작하기 위해 이름을 입력해주세요
+            </p>
+            <input type="text" id="userNameInput" placeholder="이름 입력 (예: 홍길동)" maxlength="50">
+            <button id="saveUserBtn">시작하기</button>
+        </div>
+
+        <!-- 메인 화면 -->
+        <div id="mainView" style="display: none;">
+            <div class="header">
+                <h1>📊 ChatGPT Monitor</h1>
+                <span id="browserIndicator" class="browser-badge">Chrome</span>
+            </div>
+
+            <div class="user-info">
+                <div class="user-avatar" id="userAvatar">U</div>
+                <div class="user-name" id="userName">사용자</div>
+            </div>
+
+            <!-- 전체 통계 (합산) -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">총 방문</div>
+                    <div class="stat-value">
+                        <span id="totalVisits">0</span>
+                        <span class="stat-unit">회</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">총 사용 시간</div>
+                    <div class="stat-value">
+                        <span id="totalTime">0</span>
+                        <span class="stat-unit"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 오늘 통계 (합산) -->
+            <div class="today-section">
+                <h3>📅 오늘의 사용 현황 (전체)</h3>
+                <div class="today-stats">
+                    <div class="today-stat">
+                        <div class="today-stat-value" id="todayVisits">0</div>
+                        <div class="today-stat-label">방문 횟수</div>
+                    </div>
+                    <div class="today-stat">
+                        <div class="today-stat-value" id="todayTime">0</div>
+                        <div class="today-stat-label">사용 시간</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 브라우저별 통계 -->
+            <div class="browser-section" id="browserStats">
+                <div class="browser-tabs">
+                    <button class="browser-tab active" data-browser="chrome">Chrome</button>
+                    <button class="browser-tab" data-browser="edge">Edge</button>
+                    <button class="browser-tab" data-browser="total">합계</button>
+                </div>
+                
+                <!-- Chrome 통계 -->
+                <div class="browser-content active" data-browser="chrome">
+                    <div class="browser-stat-row">
+                        <span class="browser-stat-label">전체 방문</span>
+                        <span class="browser-stat-value" id="chromeVisits">0</span>
+                    </div>
+                    <div class="browser-stat-row">
+                        <span class="browser-stat-label">전체 시간</span>
+                        <span class="browser-stat-value" id="chromeTime">0</span>
+                    </div>
+                    <div class="browser-stat-row">
+                        <span class="browser-stat-label">오늘 방문</span>
+                        <span class="browser-stat-value" id="chromeTodayVisits">0</span>
+                    </div>
+                    <div class="browser-stat-row">
+                        <span class="browser-stat-label">오늘 시간</span>
+                        <span class="browser-stat-value" id="chromeTodayTime">0</span>
+                    </div>
+                </div>
+                
+                <!-- Edge 통계 -->
+                <div class="browser-content" data-browser="edge">
+                    <div class="browser-stat-row">
+                        <span class="browser-stat-label">전체 방문</span>
+                        <span class="browser-stat-value" id="edgeVisits">0</span>
+                    </div>
+                    <div class="browser-stat-row">
+                        <span class="browser-stat-label">전체 시간</span>
+                        <span class="browser-stat-value" id="edgeTime">0</span>
+                    </div>
+                    <div class="browser-stat-row">
+                        <span class="browser-stat-label">오늘 방문</span>
+                        <span class="browser-stat-value" id="edgeTodayVisits">0</span>
+                    </div>
+                    <div class="browser-stat-row">
+                        <span class="browser-stat-label">오늘 시간</span>
+                        <span class="browser-stat-value" id="edgeTodayTime">0</span>
+                    </div>
+                </div>
+                
+                <!-- 합계 통계 -->
+                <div class="browser-content" data-browser="total">
+                    <div class="browser-stat-row">
+                        <span class="browser-stat-label">Chrome 방문/시간</span>
+                        <span class="browser-stat-value">
+                            <span id="chromeSummaryVisits">0</span>회 / 
+                            <span id="chromeSummaryTime">0</span>
+                        </span>
+                    </div>
+                    <div class="browser-stat-row">
+                        <span class="browser-stat-label">Edge 방문/시간</span>
+                        <span class="browser-stat-value">
+                            <span id="edgeSummaryVisits">0</span>회 / 
+                            <span id="edgeSummaryTime">0</span>
+                        </span>
+                    </div>
+                    <div class="browser-stat-row" style="border-top: 1px solid #e0e0e0; margin-top: 5px; padding-top: 8px;">
+                        <span class="browser-stat-label"><strong>합계</strong></span>
+                        <span class="browser-stat-value">
+                            <strong><span id="totalSummaryVisits">0</span>회 / 
+                            <span id="totalSummaryTime">0</span></strong>
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="buttons">
+                <button class="btn btn-primary" id="syncBtn">🔄 동기화</button>
+                <button class="btn btn-secondary" id="dashboardBtn">📈 대시보드</button>
+            </div>
+
+            <div class="sync-status" id="syncStatus">
+                마지막 동기화: <span id="lastSync">-</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>

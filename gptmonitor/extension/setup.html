@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ChatGPT Monitor - 초기 설정</title>
+  <!-- (기존 스타일 블록 유지) -->
+  <style>
+    /* 기존 CSS 그대로 유지 */
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+           background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);
+           min-height:100vh; display:flex; justify-content:center; align-items:center; }
+    .container { background:white; border-radius:20px; padding:40px;
+      box-shadow:0 20px 60px rgba(0,0,0,0.3); max-width:400px; width:90%; text-align:center; }
+    .logo { font-size:60px; margin-bottom:20px; }
+    h1 { color:#333; margin-bottom:10px; font-size:28px; }
+    .subtitle { color:#666; margin-bottom:30px; font-size:14px; }
+    .input-group { margin-bottom:20px; text-align:left; }
+    label { display:block; color:#555; margin-bottom:8px; font-size:14px; font-weight:500; }
+    input { width:100%; padding:12px; border:2px solid #e0e0e0; border-radius:8px; font-size:16px; transition:border-color .3s; }
+    input:focus { outline:none; border-color:#667eea; }
+    button { width:100%; padding:14px; background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);
+      color:white; border:none; border-radius:8px; font-size:16px; font-weight:600; cursor:pointer;
+      transition:transform .2s, box-shadow .2s; }
+    button:hover { transform:translateY(-2px); box-shadow:0 10px 20px rgba(102,126,234,.4); }
+    button:disabled { opacity:.6; cursor:not-allowed; transform:none; }
+    .success-message { display:none; background:#d4edda; color:#155724; padding:12px; border-radius:8px; margin-top:20px; }
+    .error-message { display:none; background:#f8d7da; color:#721c24; padding:12px; border-radius:8px; margin-top:20px; }
+    .info-box { background:#e8f4f8; padding:15px; border-radius:8px; margin-top:20px; font-size:12px; color:#2c5282; text-align:left; }
+    .info-box h3 { margin-bottom:10px; font-size:14px; }
+    .info-box ul { margin-left:20px; }
+    .info-box li { margin:5px 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">📊</div>
+    <h1>ChatGPT Monitor</h1>
+    <p class="subtitle">사용 현황 모니터링을 시작합니다</p>
+
+    <div class="input-group">
+      <label for="userName">사용자 이름 *</label>
+      <input type="text" id="userName" placeholder="예: 홍길동" maxlength="50" autocomplete="off" />
+    </div>
+
+    <div class="input-group">
+      <label for="department">부서 (선택사항)</label>
+      <input type="text" id="department" placeholder="예: 개발팀" maxlength="50" autocomplete="off" />
+    </div>
+
+    <button id="saveBtn">시작하기</button>
+
+    <div class="success-message" id="successMsg">✅ 설정이 완료되었습니다! 이제 창을 닫아도 됩니다.</div>
+    <div class="error-message" id="errorMsg">❌ 오류가 발생했습니다. 다시 시도해주세요.</div>
+
+    <div class="info-box">
+      <h3>📌 안내사항</h3>
+      <ul>
+        <li>이름은 필수 입력사항입니다</li>
+        <li>ChatGPT 사용 시간이 자동으로 기록됩니다</li>
+        <li>수집된 데이터는 업무 개선 목적으로만 사용됩니다</li>
+        <li>설정은 언제든지 변경 가능합니다</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- CSP 우회: 인라인 스크립트 금지 → 외부 파일로 분리 -->
+  <script src="setup.js" defer></script>
+</body>
+</html>
