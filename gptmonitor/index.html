@@ -476,7 +476,16 @@
         periodTotalVisits += periodVisits;
         periodTotalTime += periodTime;
 
-        const browser = (user.browserInfo || '').toLowerCase();
+        // 브라우저 정보는 문자열일 수도, 객체일 수도 있음
+        let browserInfo = user.browserInfo;
+        let browserName = 'Unknown';
+        if (typeof browserInfo === 'string') {
+          browserName = browserInfo;
+        } else if (typeof browserInfo === 'object' && browserInfo !== null) {
+          browserName = browserInfo.name || browserInfo.browser || JSON.stringify(browserInfo);
+        }
+
+        const browser = browserName.toLowerCase();
         if (browser.includes('edge')) {
           edgeVisits += periodVisits;
           edgeTime += periodTime;
@@ -484,10 +493,10 @@
           chromeVisits += periodVisits;
           chromeTime += periodTime;
         }
-        
+
         userRows.push({
           name: userName,
-          browser: user.browserInfo || 'Unknown',
+          browser: browserName,
           isOnline,
           todayVisits: todayData.visits || 0,
           todayTime: todayData.time || 0,
