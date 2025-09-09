@@ -5,6 +5,10 @@ const FIREBASE_CONFIG = {
   databaseURL: "https://sanghoon-d8f1c-default-rtdb.firebaseio.com"
 };
 
+// 확장 프로그램 전용 경로
+const USER_DB_PATH = 'extensionUsers';
+const DAILY_DB_PATH = 'extensionDaily';
+
 // 전역 상태 관리
 let globalState = {
   userName: null,
@@ -60,7 +64,7 @@ async function loadUserDataFromFirebase() {
 
   try {
     const response = await fetch(
-      `${FIREBASE_CONFIG.databaseURL}/users/${encodeURIComponent(globalState.userName)}.json`
+      `${FIREBASE_CONFIG.databaseURL}/${USER_DB_PATH}/${encodeURIComponent(globalState.userName)}.json`
     );
 
     if (response.ok) {
@@ -407,12 +411,13 @@ async function syncToFirebase() {
       lastSync: new Date().toISOString(),
       lastActivity: new Date().toISOString(),
       browserInfo: detectBrowser(),
-      version: "2.0.0"
+      version: "2.0.0",
+      source: 'extension'
     };
 
-    // Firebase에 저장 (PUT으로 완전 덮어쓰기)
+    // Firebase에 저장 (확장 사용자 전용 경로)
     const response = await fetch(
-      `${FIREBASE_CONFIG.databaseURL}/users/${encodeURIComponent(data.userName)}.json`,
+      `${FIREBASE_CONFIG.databaseURL}/${USER_DB_PATH}/${encodeURIComponent(data.userName)}.json`,
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -429,7 +434,7 @@ async function syncToFirebase() {
     const todayData = data.dailyUsage?.[today] || { visits: 0, time: 0 };
     
     await fetch(
-      `${FIREBASE_CONFIG.databaseURL}/daily/${today}/${encodeURIComponent(data.userName)}.json`,
+      `${FIREBASE_CONFIG.databaseURL}/${DAILY_DB_PATH}/${today}/${encodeURIComponent(data.userName)}.json`,
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
