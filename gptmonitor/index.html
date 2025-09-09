@@ -320,6 +320,26 @@
         <div class="summary-card-value" id="topUser" style="font-size: 20px;">-</div>
         <div class="summary-card-sub" id="topUserTime">-</div>
       </div>
+      <div class="summary-card">
+        <h3>Chrome 방문</h3>
+        <div class="summary-card-value" id="chromeVisits">0</div>
+        <div class="summary-card-sub">회</div>
+      </div>
+      <div class="summary-card">
+        <h3>Chrome 시간</h3>
+        <div class="summary-card-value" id="chromeTime">0</div>
+        <div class="summary-card-sub">시간</div>
+      </div>
+      <div class="summary-card">
+        <h3>Edge 방문</h3>
+        <div class="summary-card-value" id="edgeVisits">0</div>
+        <div class="summary-card-sub">회</div>
+      </div>
+      <div class="summary-card">
+        <h3>Edge 시간</h3>
+        <div class="summary-card-value" id="edgeTime">0</div>
+        <div class="summary-card-sub">시간</div>
+      </div>
     </div>
 
     <!-- 테이블 -->
@@ -410,6 +430,10 @@
       let currentOnline = 0;
       let periodTotalVisits = 0;
       let periodTotalTime = 0;
+      let chromeVisits = 0;
+      let chromeTime = 0;
+      let edgeVisits = 0;
+      let edgeTime = 0;
       let userRows = [];
       
       // 각 사용자 처리
@@ -448,9 +472,18 @@
             }
           });
         }
-        
+
         periodTotalVisits += periodVisits;
         periodTotalTime += periodTime;
+
+        const browser = (user.browserInfo || '').toLowerCase();
+        if (browser.includes('edge')) {
+          edgeVisits += periodVisits;
+          edgeTime += periodTime;
+        } else if (browser.includes('chrome')) {
+          chromeVisits += periodVisits;
+          chromeTime += periodTime;
+        }
         
         userRows.push({
           name: userName,
@@ -477,9 +510,14 @@
       const days = Math.max(1, Math.ceil((new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24)) + 1);
       const avgMinutes = userRows.length > 0 ? Math.round(periodTotalTime / userRows.length / days / 60000) : 0;
       document.getElementById('avgTime').textContent = avgMinutes;
-      
+
+      document.getElementById('chromeVisits').textContent = chromeVisits;
+      document.getElementById('chromeTime').textContent = formatHours(chromeTime);
+      document.getElementById('edgeVisits').textContent = edgeVisits;
+      document.getElementById('edgeTime').textContent = formatHours(edgeTime);
+
       // 최다 사용자
-      const topUser = userRows.reduce((max, user) => 
+      const topUser = userRows.reduce((max, user) =>
         user.periodTime > (max?.periodTime || 0) ? user : max, null);
       
       if (topUser) {
