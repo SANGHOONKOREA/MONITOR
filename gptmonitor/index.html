@@ -506,10 +506,13 @@
       
       userRows.forEach(user => {
         const tr = document.createElement('tr');
-        
-        const browserBadge = user.browser.toLowerCase().includes('edge') ? 
+
+        const browserValue = (user.browser ?? '').toString();
+        const browserLower = browserValue.toLowerCase();
+
+        const browserBadge = browserLower.includes('edge') ?
           '<span class="browser-badge browser-edge">Edge</span>' :
-          user.browser.toLowerCase().includes('chrome') ?
+          browserLower.includes('chrome') ?
           '<span class="browser-badge browser-chrome">Chrome</span>' :
           '';
         
