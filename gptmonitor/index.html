@@ -443,12 +443,6 @@
         <label>팀:</label>
         <select id="teamFilter" onchange="applyTeamFilter()">
           <option value="all">전체 팀</option>
-          <option value="개발팀">개발팀</option>
-          <option value="기획팀">기획팀</option>
-          <option value="디자인팀">디자인팀</option>
-          <option value="마케팅팀">마케팅팀</option>
-          <option value="영업팀">영업팀</option>
-          <option value="기타">기타</option>
         </select>
       </div>
       <div style="display: flex; gap: 10px;">
@@ -578,6 +572,65 @@
     let userSettings = {};  // 사용자별 팀, 집계 포함 여부 저장
     let showExcluded = false;  // 제외된 사용자 표시 여부
 
+    function getKnownTeams(additionalTeam = null) {
+      const teams = new Set();
+
+      Object.keys(allUsers).forEach(userName => {
+        const user = allUsers[userName];
+        if (!user) return;
+        const metadataTeam = (user.metadata?.team || user.metadata?.department || '').trim();
+        if (metadataTeam) {
+          teams.add(metadataTeam);
+        }
+      });
+
+      Object.values(userSettings).forEach(setting => {
+        const team = (setting?.team || '').trim();
+        if (team) {
+          teams.add(team);
+        }
+      });
+
+      if (additionalTeam) {
+        teams.add(additionalTeam);
+      }
+
+      teams.add('기타');
+
+      return Array.from(teams)
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b, 'ko-KR'));
+    }
+
+    function renderTeamFilterOptions() {
+      const select = document.getElementById('teamFilter');
+      if (!select) return;
+
+      const previousValue = select.value || 'all';
+      const teamList = getKnownTeams();
+
+      select.innerHTML = '';
+
+      const allOption = document.createElement('option');
+      allOption.value = 'all';
+      allOption.textContent = '전체 팀';
+      select.appendChild(allOption);
+
+      teamList.forEach(team => {
+        if (team === '전체 팀') return;
+        const option = document.createElement('option');
+        option.value = team;
+        option.textContent = team;
+        select.appendChild(option);
+      });
+
+      if (previousValue === 'all' || teamList.includes(previousValue)) {
+        select.value = previousValue;
+      } else {
+        select.value = 'all';
+      }
+    }
+
     // 초기화
     window.onload = () => {
       // 로컬스토리지에서 사용자 설정 로드
@@ -599,6 +652,7 @@
       if (saved) {
         userSettings = JSON.parse(saved);
       }
+      renderTeamFilterOptions();
     }
 
     // 사용자 설정 저장
@@ -614,14 +668,40 @@
         
         // 새로운 사용자를 위한 기본 설정 추가
         Object.keys(allUsers).forEach(userName => {
+          const user = allUsers[userName];
+          const metadataTeam = (user?.metadata?.team || user?.metadata?.department || '').trim();
+          const normalizedTeam = metadataTeam || null;
+
           if (!userSettings[userName]) {
             userSettings[userName] = {
-              team: '기타',
-              included: true  // 기본적으로 집계에 포함
+              team: normalizedTeam || '기타',
+              included: true,  // 기본적으로 집계에 포함
+              autoAssigned: true
             };
+            return;
           }
+
+          const setting = userSettings[userName];
+          if (setting.autoAssigned === undefined) {
+            setting.autoAssigned = !setting.team || ['기타', 'Unknown'].includes(setting.team);
+          }
+
+          if (normalizedTeam && (!setting.team || setting.autoAssigned)) {
+            setting.team = normalizedTeam;
+            setting.autoAssigned = true;
+          } else if (!setting.team) {
+            setting.team = '기타';
+            setting.autoAssigned = true;
+          }
+
+          if (typeof setting.included !== 'boolean') {
+            setting.included = true;
+          }
+
+          userSettings[userName] = setting;
         });
-        
+
+        renderTeamFilterOptions();
         saveUserSettingsToLocal();
         updateDisplay();
       } catch (error) {
@@ -654,9 +734,10 @@
         if (!user) return;
         
         const userSetting = userSettings[userName] || { team: '기타', included: true };
-        
+        const displayTeam = userSetting.team || '기타';
+
         // 팀 필터
-        if (teamFilter !== 'all' && userSetting.team !== teamFilter) return;
+        if (teamFilter !== 'all' && displayTeam !== teamFilter) return;
         
         // 검색 필터
         if (searchTerm && !userName.toLowerCase().includes(searchTerm)) return;
@@ -730,7 +811,7 @@
         
         userRows.push({
           name: userName,
-          team: userSetting.team,
+          team: displayTeam,
           included: userSetting.included,
           isOnline,
           chromeVisits: periodChromeVisits,
@@ -853,7 +934,7 @@
     // 사용자 집계 포함 토글
     function toggleUserInclude(userName, included) {
       if (!userSettings[userName]) {
-        userSettings[userName] = { team: '기타', included: true };
+        userSettings[userName] = { team: '기타', included: true, autoAssigned: true };
       }
       userSettings[userName].included = included;
       saveUserSettingsToLocal();
@@ -875,25 +956,28 @@
       
       // 모든 사용자 목록 생성
       Object.keys(allUsers).sort().forEach(userName => {
-        const userSetting = userSettings[userName] || { team: '기타', included: true };
-        
+        const user = allUsers[userName];
+        const metadataTeam = (user?.metadata?.team || user?.metadata?.department || '').trim();
+        const existingSetting = userSettings[userName] || { team: '기타', included: true };
+        const currentTeam = existingSetting.team || metadataTeam || '기타';
+        userSettings[userName] = { ...existingSetting, team: currentTeam };
+        const teamOptions = getKnownTeams(currentTeam);
+        const optionsHtml = teamOptions
+          .map(team => `<option value="${team}" ${currentTeam === team ? 'selected' : ''}>${team}</option>`)
+          .join('');
+
         const item = document.createElement('div');
         item.className = 'user-setting-item';
         item.innerHTML = `
           <div class="user-info-section">
             <strong>${userName}</strong>
             <select class="team-select" id="team-${userName}">
-              <option value="개발팀" ${userSetting.team === '개발팀' ? 'selected' : ''}>개발팀</option>
-              <option value="기획팀" ${userSetting.team === '기획팀' ? 'selected' : ''}>기획팀</option>
-              <option value="디자인팀" ${userSetting.team === '디자인팀' ? 'selected' : ''}>디자인팀</option>
-              <option value="마케팅팀" ${userSetting.team === '마케팅팀' ? 'selected' : ''}>마케팅팀</option>
-              <option value="영업팀" ${userSetting.team === '영업팀' ? 'selected' : ''}>영업팀</option>
-              <option value="기타" ${userSetting.team === '기타' ? 'selected' : ''}>기타</option>
+              ${optionsHtml}
             </select>
           </div>
           <label style="display: flex; align-items: center; gap: 5px;">
-            <input type="checkbox" class="include-checkbox" id="include-${userName}" 
-              ${userSetting.included ? 'checked' : ''}>
+            <input type="checkbox" class="include-checkbox" id="include-${userName}"
+              ${existingSetting.included ? 'checked' : ''}>
             <span>집계 포함</span>
           </label>
         `;
@@ -913,16 +997,19 @@
       Object.keys(allUsers).forEach(userName => {
         const teamSelect = document.getElementById(`team-${userName}`);
         const includeCheck = document.getElementById(`include-${userName}`);
-        
+
         if (teamSelect && includeCheck) {
           userSettings[userName] = {
+            ...userSettings[userName],
             team: teamSelect.value,
-            included: includeCheck.checked
+            included: includeCheck.checked,
+            autoAssigned: false
           };
         }
       });
-      
+
       saveUserSettingsToLocal();
+      renderTeamFilterOptions();
       closeUserSettings();
       updateDisplay();
     }
@@ -941,6 +1028,7 @@
         if (!user) return;
         
         const userSetting = userSettings[userName] || { team: '기타', included: true };
+        const displayTeam = userSetting.team || '기타';
         const metadata = user.metadata || {};
         
         // 브라우저별 데이터
@@ -982,7 +1070,7 @@
         
         data.push({
           '사용자명': userName,
-          '팀': userSetting.team,
+          '팀': displayTeam,
           '집계 포함': userSetting.included ? 'O' : 'X',
           'Chrome 방문수': periodChromeVisits,
           'Chrome 시간(분)': Math.round(periodChromeTime / 60000),

@@ -22,14 +22,15 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
   try {
     await chrome.storage.local.set({
       userName: userName,
-      department: department || 'Unknown',
+      department: department || '기타',
       setupCompleted: true,
       setupDate: new Date().toISOString()
     });
 
     await chrome.runtime.sendMessage({
       type: 'SET_USERNAME',
-      userName: userName
+      userName: userName,
+      department: department || null
     });
 
     successMsg.style.display = 'block';

@@ -13,7 +13,8 @@ let globalState = {
   currentTabId: null,
   sessionStartTime: null,
   lastSyncTime: 0,
-  syncInProgress: false
+  syncInProgress: false,
+  teamName: null
 };
 
 // ─────────────────────────────────────────────
@@ -48,7 +49,7 @@ async function initializeExtension() {
   console.log('Browser detected:', globalState.browserType);
   
   // 로컬 스토리지에서 사용자 정보 확인
-  const localData = await chrome.storage.local.get(['userName', 'setupCompleted']);
+  const localData = await chrome.storage.local.get(['userName', 'setupCompleted', 'department']);
   
   if (!localData.userName || !localData.setupCompleted) {
     // 초기 설정 필요
@@ -57,6 +58,7 @@ async function initializeExtension() {
   }
 
   globalState.userName = localData.userName;
+  globalState.teamName = localData.department || null;
 
   // Firebase에서 통합 데이터 로드
   await loadUserDataFromFirebase();
@@ -90,7 +92,7 @@ async function loadUserDataFromFirebase() {
         const browserData = firebaseData.browsers?.[browserKey] || {};
         
         // 로컬에 복원 (브라우저별 데이터)
-        await chrome.storage.local.set({
+        const storagePayload = {
           totalVisits: browserData.totalVisits || 0,
           totalTime: browserData.totalTime || 0,
           dailyUsage: browserData.dailyUsage || {},
@@ -99,8 +101,16 @@ async function loadUserDataFromFirebase() {
           combinedTotalVisits: firebaseData.combinedStats?.totalVisits || 0,
           combinedTotalTime: firebaseData.combinedStats?.totalTime || 0,
           lastSync: firebaseData.lastSync || null
-        });
-        
+        };
+
+        const teamFromFirebase = firebaseData.metadata?.team || firebaseData.metadata?.department;
+        if (teamFromFirebase) {
+          storagePayload.department = teamFromFirebase;
+          globalState.teamName = teamFromFirebase;
+        }
+
+        await chrome.storage.local.set(storagePayload);
+
         console.log(`Data restored from Firebase for ${globalState.browserType}:`, {
           visits: browserData.totalVisits || 0,
           time: Math.round((browserData.totalTime || 0) / 60000) + ' minutes',
@@ -109,21 +119,41 @@ async function loadUserDataFromFirebase() {
         return true;
       }
     }
-    
-    // 새 사용자 초기화
-    await chrome.storage.local.set({
-      totalVisits: 0,
-      totalTime: 0,
-      dailyUsage: {},
-      monthlyUsage: {},
-      combinedTotalVisits: 0,
-      combinedTotalTime: 0,
-      lastSync: null
-    });
-    
-    console.log('New user, initialized with empty data');
+
+    const existingLocal = await chrome.storage.local.get([
+      'totalVisits', 'totalTime', 'dailyUsage', 'monthlyUsage',
+      'combinedTotalVisits', 'combinedTotalTime', 'department'
+    ]);
+
+    const hasExistingData = (
+      (existingLocal.totalVisits || 0) > 0 ||
+      (existingLocal.totalTime || 0) > 0 ||
+      (existingLocal.combinedTotalVisits || 0) > 0 ||
+      (existingLocal.combinedTotalTime || 0) > 0 ||
+      (existingLocal.dailyUsage && Object.keys(existingLocal.dailyUsage).length > 0) ||
+      (existingLocal.monthlyUsage && Object.keys(existingLocal.monthlyUsage).length > 0)
+    );
+
+    if (!hasExistingData) {
+      await chrome.storage.local.set({
+        totalVisits: 0,
+        totalTime: 0,
+        dailyUsage: {},
+        monthlyUsage: {},
+        combinedTotalVisits: 0,
+        combinedTotalTime: 0,
+        lastSync: null
+      });
+
+      console.log('New user, initialized with empty data');
+    } else {
+      if (existingLocal.department) {
+        globalState.teamName = existingLocal.department;
+      }
+      console.log('Firebase returned no data, preserved existing local statistics');
+    }
     return false;
-    
+
   } catch (error) {
     console.error('Failed to load from Firebase:', error);
     return false;
@@ -267,7 +297,27 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
   try {
     const tab = await chrome.tabs.get(activeInfo.tabId);
     if (isChatGPTUrl(tab.url)) {
+      await incrementVisit();
       startTracking(activeInfo.tabId);
+    } else {
+      await stopTracking();
+    }
+  } catch (error) {
+    await stopTracking();
+  }
+});
+
+chrome.windows.onFocusChanged.addListener(async (windowId) => {
+  if (windowId === chrome.windows.WINDOW_ID_NONE) {
+    await stopTracking();
+    return;
+  }
+
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, windowId });
+    if (tab && isChatGPTUrl(tab.url)) {
+      await incrementVisit();
+      startTracking(tab.id);
     } else {
       await stopTracking();
     }
@@ -310,8 +360,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
         case 'SET_USERNAME':
           globalState.userName = request.userName;
+          const existingInfo = await chrome.storage.local.get(['department']);
+          const normalizedDepartment =
+            typeof request.department === 'string'
+              ? request.department
+              : existingInfo.department || null;
+          globalState.teamName = normalizedDepartment;
           await chrome.storage.local.set({
             userName: request.userName,
+            department: normalizedDepartment,
             setupCompleted: true
           });
           await initializeExtension();
@@ -406,8 +463,8 @@ async function syncToFirebase() {
     }
 
     const data = await chrome.storage.local.get([
-      'userName', 'dailyUsage', 'monthlyUsage', 
-      'totalVisits', 'totalTime'
+      'userName', 'dailyUsage', 'monthlyUsage',
+      'totalVisits', 'totalTime', 'department'
     ]);
 
     if (!data.userName) {
@@ -466,7 +523,8 @@ async function syncToFirebase() {
           lastSync: new Date().toISOString(),
           lastActivity: new Date().toISOString(),
           activeBrowser: globalState.browserType,
-          version: "3.0.0"
+          version: "3.0.0",
+          team: data.department || globalState.teamName || null
         })
       }
     );
