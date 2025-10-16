@@ -12,8 +12,8 @@
         }
 
         body {
-            width: 380px;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            width: 420px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         }
 
@@ -86,6 +86,64 @@
             color: #333;
         }
 
+        .tracking-status {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+
+        .tracking-status.active {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .tracking-status.inactive {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        /* 탭 네비게이션 */
+        .tab-nav {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 15px;
+            background: white;
+            padding: 5px;
+            border-radius: 8px;
+        }
+
+        .tab-button {
+            flex: 1;
+            padding: 8px;
+            border: none;
+            background: transparent;
+            color: #666;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            border-radius: 5px;
+            transition: all 0.2s;
+        }
+
+        .tab-button.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .tab-button:hover:not(.active) {
+            background: #f0f0f0;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* 통계 카드 */
         .stats-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -155,61 +213,43 @@
             margin-top: 2px;
         }
 
-        /* 브라우저별 통계 섹션 */
-        .browser-section {
-            background: white;
+        /* 통합 통계 섹션 */
+        .combined-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             border-radius: 8px;
-            padding: 12px;
+            padding: 15px;
             margin-bottom: 15px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            color: white;
         }
 
-        .browser-tabs {
-            display: flex;
-            gap: 5px;
-            margin-bottom: 10px;
-            border-bottom: 1px solid #e0e0e0;
+        .combined-section h3 {
+            font-size: 14px;
+            margin-bottom: 12px;
+            opacity: 0.9;
         }
 
-        .browser-tab {
-            padding: 6px 12px;
-            border: none;
-            background: none;
-            color: #666;
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: 500;
-            border-bottom: 2px solid transparent;
-            transition: all 0.2s;
+        .combined-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            text-align: center;
         }
 
-        .browser-tab.active {
-            color: #667eea;
-            border-bottom-color: #667eea;
+        .combined-stat {
+            background: rgba(255, 255, 255, 0.15);
+            padding: 10px;
+            border-radius: 5px;
         }
 
-        .browser-content {
-            display: none;
+        .combined-stat-label {
+            font-size: 10px;
+            opacity: 0.9;
+            margin-bottom: 5px;
         }
 
-        .browser-content.active {
-            display: block;
-        }
-
-        .browser-stat-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 6px 0;
-            font-size: 12px;
-        }
-
-        .browser-stat-label {
-            color: #666;
-        }
-
-        .browser-stat-value {
+        .combined-stat-value {
+            font-size: 20px;
             font-weight: bold;
-            color: #333;
         }
 
         .buttons {
@@ -333,111 +373,118 @@
             <div class="user-info">
                 <div class="user-avatar" id="userAvatar">U</div>
                 <div class="user-name" id="userName">사용자</div>
+                <div id="trackingStatus" class="tracking-status inactive">⚫ 대기</div>
             </div>
 
-            <!-- 전체 통계 (합산) -->
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-label">총 방문</div>
-                    <div class="stat-value">
-                        <span id="totalVisits">0</span>
-                        <span class="stat-unit">회</span>
+            <!-- 탭 네비게이션 -->
+            <div class="tab-nav">
+                <button class="tab-button active" data-tab="current">현재 브라우저</button>
+                <button class="tab-button" data-tab="other">다른 브라우저</button>
+                <button class="tab-button" data-tab="combined">통합</button>
+            </div>
+
+            <!-- 현재 브라우저 탭 -->
+            <div id="currentTab" class="tab-content active">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">총 방문</div>
+                        <div class="stat-value">
+                            <span id="totalVisits">0</span>
+                            <span class="stat-unit">회</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">총 사용 시간</div>
+                        <div class="stat-value">
+                            <span id="totalTime">0</span>
+                            <span class="stat-unit"></span>
+                        </div>
                     </div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-label">총 사용 시간</div>
-                    <div class="stat-value">
-                        <span id="totalTime">0</span>
-                        <span class="stat-unit"></span>
+
+                <div class="today-section">
+                    <h3 id="currentBrowserToday">📅 오늘 (Chrome)</h3>
+                    <div class="today-stats">
+                        <div class="today-stat">
+                            <div class="today-stat-value" id="todayVisits">0</div>
+                            <div class="today-stat-label">방문 횟수</div>
+                        </div>
+                        <div class="today-stat">
+                            <div class="today-stat-value" id="todayTime">0</div>
+                            <div class="today-stat-label">사용 시간</div>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- 오늘 통계 (합산) -->
-            <div class="today-section">
-                <h3>📅 오늘의 사용 현황 (전체)</h3>
-                <div class="today-stats">
-                    <div class="today-stat">
-                        <div class="today-stat-value" id="todayVisits">0</div>
-                        <div class="today-stat-label">방문 횟수</div>
+            <!-- 다른 브라우저 탭 -->
+            <div id="otherTab" class="tab-content">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">총 방문</div>
+                        <div class="stat-value">
+                            <span id="otherTotalVisits">0</span>
+                            <span class="stat-unit">회</span>
+                        </div>
                     </div>
-                    <div class="today-stat">
-                        <div class="today-stat-value" id="todayTime">0</div>
-                        <div class="today-stat-label">사용 시간</div>
+                    <div class="stat-card">
+                        <div class="stat-label">총 사용 시간</div>
+                        <div class="stat-value">
+                            <span id="otherTotalTime">0</span>
+                            <span class="stat-unit"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="today-section">
+                    <h3 id="otherBrowserToday">📅 오늘 (Edge)</h3>
+                    <div class="today-stats">
+                        <div class="today-stat">
+                            <div class="today-stat-value" id="otherTodayVisits">0</div>
+                            <div class="today-stat-label">방문 횟수</div>
+                        </div>
+                        <div class="today-stat">
+                            <div class="today-stat-value" id="otherTodayTime">0</div>
+                            <div class="today-stat-label">사용 시간</div>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- 브라우저별 통계 -->
-            <div class="browser-section" id="browserStats">
-                <div class="browser-tabs">
-                    <button class="browser-tab active" data-browser="chrome">Chrome</button>
-                    <button class="browser-tab" data-browser="edge">Edge</button>
-                    <button class="browser-tab" data-browser="total">합계</button>
-                </div>
-                
-                <!-- Chrome 통계 -->
-                <div class="browser-content active" data-browser="chrome">
-                    <div class="browser-stat-row">
-                        <span class="browser-stat-label">전체 방문</span>
-                        <span class="browser-stat-value" id="chromeVisits">0</span>
-                    </div>
-                    <div class="browser-stat-row">
-                        <span class="browser-stat-label">전체 시간</span>
-                        <span class="browser-stat-value" id="chromeTime">0</span>
-                    </div>
-                    <div class="browser-stat-row">
-                        <span class="browser-stat-label">오늘 방문</span>
-                        <span class="browser-stat-value" id="chromeTodayVisits">0</span>
-                    </div>
-                    <div class="browser-stat-row">
-                        <span class="browser-stat-label">오늘 시간</span>
-                        <span class="browser-stat-value" id="chromeTodayTime">0</span>
+            <!-- 통합 탭 -->
+            <div id="combinedTab" class="tab-content">
+                <div class="combined-section">
+                    <h3>🌐 모든 브라우저 통합 통계</h3>
+                    <div class="combined-stats">
+                        <div class="combined-stat">
+                            <div class="combined-stat-label">Chrome</div>
+                            <div class="combined-stat-value" id="chromeCombined">0</div>
+                        </div>
+                        <div class="combined-stat">
+                            <div class="combined-stat-label">Edge</div>
+                            <div class="combined-stat-value" id="edgeCombined">0</div>
+                        </div>
+                        <div class="combined-stat">
+                            <div class="combined-stat-label">합계</div>
+                            <div class="combined-stat-value" id="totalCombined">0</div>
+                        </div>
                     </div>
                 </div>
-                
-                <!-- Edge 통계 -->
-                <div class="browser-content" data-browser="edge">
-                    <div class="browser-stat-row">
-                        <span class="browser-stat-label">전체 방문</span>
-                        <span class="browser-stat-value" id="edgeVisits">0</span>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">전체 방문</div>
+                        <div class="stat-value">
+                            <span id="combinedTotalVisits">0</span>
+                            <span class="stat-unit">회</span>
+                        </div>
                     </div>
-                    <div class="browser-stat-row">
-                        <span class="browser-stat-label">전체 시간</span>
-                        <span class="browser-stat-value" id="edgeTime">0</span>
-                    </div>
-                    <div class="browser-stat-row">
-                        <span class="browser-stat-label">오늘 방문</span>
-                        <span class="browser-stat-value" id="edgeTodayVisits">0</span>
-                    </div>
-                    <div class="browser-stat-row">
-                        <span class="browser-stat-label">오늘 시간</span>
-                        <span class="browser-stat-value" id="edgeTodayTime">0</span>
-                    </div>
-                </div>
-                
-                <!-- 합계 통계 -->
-                <div class="browser-content" data-browser="total">
-                    <div class="browser-stat-row">
-                        <span class="browser-stat-label">Chrome 방문/시간</span>
-                        <span class="browser-stat-value">
-                            <span id="chromeSummaryVisits">0</span>회 / 
-                            <span id="chromeSummaryTime">0</span>
-                        </span>
-                    </div>
-                    <div class="browser-stat-row">
-                        <span class="browser-stat-label">Edge 방문/시간</span>
-                        <span class="browser-stat-value">
-                            <span id="edgeSummaryVisits">0</span>회 / 
-                            <span id="edgeSummaryTime">0</span>
-                        </span>
-                    </div>
-                    <div class="browser-stat-row" style="border-top: 1px solid #e0e0e0; margin-top: 5px; padding-top: 8px;">
-                        <span class="browser-stat-label"><strong>합계</strong></span>
-                        <span class="browser-stat-value">
-                            <strong><span id="totalSummaryVisits">0</span>회 / 
-                            <span id="totalSummaryTime">0</span></strong>
-                        </span>
+                    <div class="stat-card">
+                        <div class="stat-label">전체 시간</div>
+                        <div class="stat-value">
+                            <span id="combinedTotalTime">0</span>
+                            <span class="stat-unit"></span>
+                        </div>
                     </div>
                 </div>
             </div>

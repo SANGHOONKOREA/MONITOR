@@ -1,7 +1,10 @@
-// popup.js - 안정화 버전
+// popup.js - 브라우저 통합 버전
 
-// DOM 로드 대기
 document.addEventListener('DOMContentLoaded', initialize);
+
+let currentBrowser = null;
+let otherBrowser = null;
+let updateInterval = null;
 
 async function initialize() {
   try {
@@ -45,7 +48,6 @@ function showSetupView() {
         userName: userName
       });
       
-      // 잠시 후 메인 화면으로 전환
       setTimeout(async () => {
         const stats = await chrome.runtime.sendMessage({ type: 'GET_STATS' });
         showMainView(stats);
@@ -73,9 +75,21 @@ function showMainView(stats) {
   document.getElementById('mainView').style.display = 'block';
   document.getElementById('loadingView').style.display = 'none';
   
+  // 브라우저 타입 설정
+  currentBrowser = stats.browserInfo || 'Chrome';
+  otherBrowser = currentBrowser === 'Chrome' ? 'Edge' : 'Chrome';
+  
+  // 브라우저 표시
+  const browserBadge = document.getElementById('browserIndicator');
+  browserBadge.textContent = currentBrowser;
+  browserBadge.className = `browser-badge ${currentBrowser.toLowerCase()}`;
+  
   // 사용자 정보
   document.getElementById('userName').textContent = stats.userName;
   document.getElementById('userAvatar').textContent = stats.userName.charAt(0).toUpperCase();
+  
+  // 탭 네비게이션 설정
+  setupTabNavigation();
   
   // 통계 업데이트
   updateStats(stats);
@@ -84,7 +98,7 @@ function showMainView(stats) {
   setupButtons();
   
   // 1초마다 업데이트
-  setInterval(async () => {
+  updateInterval = setInterval(async () => {
     try {
       const stats = await chrome.runtime.sendMessage({ type: 'GET_STATS' });
       updateStats(stats);
@@ -95,18 +109,51 @@ function showMainView(stats) {
 }
 
 // ─────────────────────────────────────────────
+// 탭 네비게이션 설정
+// ─────────────────────────────────────────────
+function setupTabNavigation() {
+  const tabButtons = document.querySelectorAll('.tab-button');
+  const tabContents = document.querySelectorAll('.tab-content');
+  
+  tabButtons.forEach(button => {
+    button.addEventListener('click', () => {
+      const tabName = button.dataset.tab;
+      
+      // 모든 탭 비활성화
+      tabButtons.forEach(btn => btn.classList.remove('active'));
+      tabContents.forEach(content => content.classList.remove('active'));
+      
+      // 선택한 탭 활성화
+      button.classList.add('active');
+      document.getElementById(`${tabName}Tab`).classList.add('active');
+    });
+  });
+}
+
+// ─────────────────────────────────────────────
 // 통계 업데이트
 // ─────────────────────────────────────────────
 function updateStats(stats) {
   const today = new Date().toISOString().split('T')[0];
   const todayData = stats.dailyUsage?.[today] || { visits: 0, time: 0 };
   
-  // 총 통계
+  // 추적 상태
+  const trackingStatus = document.getElementById('trackingStatus');
+  if (stats.isTracking) {
+    trackingStatus.textContent = '🟢 추적 중';
+    trackingStatus.className = 'tracking-status active';
+  } else {
+    trackingStatus.textContent = '⚫ 대기';
+    trackingStatus.className = 'tracking-status inactive';
+  }
+  
+  // === 현재 브라우저 통계 ===
   document.getElementById('totalVisits').textContent = stats.totalVisits || 0;
+  document.getElementById('currentBrowserToday').textContent = `📅 오늘 (${currentBrowser})`;
   
   // 총 시간 (현재 세션 포함)
   let totalTime = stats.totalTime || 0;
-  if (stats.currentSessionTime) {
+  if (stats.currentSessionTime && stats.isTracking) {
     totalTime += stats.currentSessionTime;
   }
   document.getElementById('totalTime').textContent = formatTime(totalTime);
@@ -114,24 +161,58 @@ function updateStats(stats) {
   // 오늘 통계
   document.getElementById('todayVisits').textContent = todayData.visits || 0;
   
-  // 오늘 시간 (현재 세션 포함)
   let todayTime = todayData.time || 0;
   if (stats.currentSessionTime && stats.isTracking) {
     todayTime += stats.currentSessionTime;
   }
   document.getElementById('todayTime').textContent = formatTime(todayTime);
   
-  // 상태 표시
-  const statusElement = document.getElementById('trackingStatus');
-  if (statusElement) {
-    if (stats.isTracking) {
-      statusElement.textContent = '🟢 추적 중';
-      statusElement.style.color = '#10b981';
+  // === 다른 브라우저 통계 ===
+  if (stats.otherBrowserData) {
+    const otherToday = stats.otherBrowserData.dailyUsage?.[today] || { visits: 0, time: 0 };
+    
+    document.getElementById('otherBrowserToday').textContent = `📅 오늘 (${otherBrowser})`;
+    document.getElementById('otherTotalVisits').textContent = stats.otherBrowserData.totalVisits || 0;
+    document.getElementById('otherTotalTime').textContent = formatTime(stats.otherBrowserData.totalTime || 0);
+    document.getElementById('otherTodayVisits').textContent = otherToday.visits || 0;
+    document.getElementById('otherTodayTime').textContent = formatTime(otherToday.time || 0);
+  } else {
+    document.getElementById('otherBrowserToday').textContent = `📅 오늘 (${otherBrowser})`;
+    document.getElementById('otherTotalVisits').textContent = '0';
+    document.getElementById('otherTotalTime').textContent = '0';
+    document.getElementById('otherTodayVisits').textContent = '0';
+    document.getElementById('otherTodayTime').textContent = '0';
+  }
+  
+  // === 통합 통계 ===
+  const chromeData = currentBrowser === 'Chrome' ? 
+    { visits: stats.totalVisits || 0, time: stats.totalTime || 0 } :
+    stats.otherBrowserData ? 
+      { visits: stats.otherBrowserData.totalVisits || 0, time: stats.otherBrowserData.totalTime || 0 } :
+      { visits: 0, time: 0 };
+      
+  const edgeData = currentBrowser === 'Edge' ? 
+    { visits: stats.totalVisits || 0, time: stats.totalTime || 0 } :
+    stats.otherBrowserData ? 
+      { visits: stats.otherBrowserData.totalVisits || 0, time: stats.otherBrowserData.totalTime || 0 } :
+      { visits: 0, time: 0 };
+  
+  // 현재 세션 시간을 적절한 브라우저에 추가
+  if (stats.currentSessionTime && stats.isTracking) {
+    if (currentBrowser === 'Chrome') {
+      chromeData.time += stats.currentSessionTime;
     } else {
-      statusElement.textContent = '⚫ 대기 중';
-      statusElement.style.color = '#6b7280';
+      edgeData.time += stats.currentSessionTime;
     }
   }
+  
+  // 통합 통계 표시
+  document.getElementById('chromeCombined').textContent = formatShortTime(chromeData.time);
+  document.getElementById('edgeCombined').textContent = formatShortTime(edgeData.time);
+  document.getElementById('totalCombined').textContent = formatShortTime(chromeData.time + edgeData.time);
+  
+  document.getElementById('combinedTotalVisits').textContent = chromeData.visits + edgeData.visits;
+  document.getElementById('combinedTotalTime').textContent = formatTime(chromeData.time + edgeData.time);
   
   // 마지막 동기화 시간
   if (stats.lastSync) {
@@ -145,14 +226,6 @@ function updateStats(stats) {
     else syncText = `${Math.floor(diff / 60)}시간 전`;
     
     document.getElementById('lastSync').textContent = syncText;
-  }
-  
-  // 브라우저 표시
-  if (stats.browserInfo) {
-    const browserElement = document.getElementById('browserInfo');
-    if (browserElement) {
-      browserElement.textContent = stats.browserInfo;
-    }
   }
 }
 
@@ -175,6 +248,12 @@ function setupButtons() {
         btn.textContent = '✓ 완료';
         document.getElementById('syncStatus').textContent = '동기화 성공!';
         document.getElementById('syncStatus').className = 'sync-status success';
+        
+        // 최신 데이터 다시 로드
+        setTimeout(async () => {
+          const stats = await chrome.runtime.sendMessage({ type: 'GET_STATS' });
+          updateStats(stats);
+        }, 500);
       } else {
         btn.textContent = '❌ 실패';
         document.getElementById('syncStatus').textContent = '오류: ' + result.error;
@@ -218,3 +297,21 @@ function formatTime(ms) {
     return `${seconds}초`;
   }
 }
+
+function formatShortTime(ms) {
+  const hours = Math.floor(ms / 3600000);
+  const minutes = Math.floor((ms % 3600000) / 60000);
+  
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  } else {
+    return `${minutes}m`;
+  }
+}
+
+// 정리
+window.addEventListener('unload', () => {
+  if (updateInterval) {
+    clearInterval(updateInterval);
+  }
+});

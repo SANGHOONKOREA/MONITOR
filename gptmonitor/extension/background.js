@@ -1,5 +1,5 @@
-// background.js - 안정화 버전 (데이터 리셋 방지, 브라우저 통합)
-// 핵심: Firebase를 Single Source of Truth로 사용
+// background.js - 브라우저 통합 모니터링 버전
+// 크롬과 엣지 데이터를 분리하여 저장하고 통합 관리
 
 const FIREBASE_CONFIG = {
   databaseURL: "https://sanghoon-d8f1c-default-rtdb.firebaseio.com"
@@ -8,6 +8,7 @@ const FIREBASE_CONFIG = {
 // 전역 상태 관리
 let globalState = {
   userName: null,
+  browserType: null,  // 'Chrome' or 'Edge'
   isTracking: false,
   currentTabId: null,
   sessionStartTime: null,
@@ -16,7 +17,20 @@ let globalState = {
 };
 
 // ─────────────────────────────────────────────
-// 초기화 - Firebase에서 먼저 데이터 로드
+// 브라우저 타입 감지 (개선)
+// ─────────────────────────────────────────────
+function detectBrowser() {
+  const userAgent = navigator.userAgent;
+  if (userAgent.includes('Edg')) {
+    return 'Edge';
+  } else if (userAgent.includes('Chrome')) {
+    return 'Chrome';
+  }
+  return 'Unknown';
+}
+
+// ─────────────────────────────────────────────
+// 초기화
 // ─────────────────────────────────────────────
 chrome.runtime.onInstalled.addListener(async () => {
   console.log('Extension installed/updated');
@@ -29,7 +43,11 @@ chrome.runtime.onStartup.addListener(async () => {
 });
 
 async function initializeExtension() {
-  // 1. 로컬 스토리지에서 사용자 이름 확인
+  // 브라우저 타입 설정
+  globalState.browserType = detectBrowser();
+  console.log('Browser detected:', globalState.browserType);
+  
+  // 로컬 스토리지에서 사용자 정보 확인
   const localData = await chrome.storage.local.get(['userName', 'setupCompleted']);
   
   if (!localData.userName || !localData.setupCompleted) {
@@ -40,20 +58,20 @@ async function initializeExtension() {
 
   globalState.userName = localData.userName;
 
-  // 2. Firebase에서 기존 데이터 로드 (있으면 복원, 없으면 새로 시작)
+  // Firebase에서 통합 데이터 로드
   await loadUserDataFromFirebase();
 
-  // 3. 동기화 알람 설정 (30초마다)
+  // 동기화 알람 설정 (30초마다)
   chrome.alarms.create("syncToFirebase", { 
     delayInMinutes: 0.5, 
     periodInMinutes: 0.5 
   });
 
-  console.log('Extension initialized for user:', globalState.userName);
+  console.log(`Extension initialized for user: ${globalState.userName} on ${globalState.browserType}`);
 }
 
 // ─────────────────────────────────────────────
-// Firebase 데이터 로드 (리셋 방지 핵심)
+// Firebase 데이터 로드 (브라우저별 + 통합)
 // ─────────────────────────────────────────────
 async function loadUserDataFromFirebase() {
   if (!globalState.userName) return;
@@ -67,29 +85,39 @@ async function loadUserDataFromFirebase() {
       const firebaseData = await response.json();
       
       if (firebaseData) {
-        // Firebase 데이터가 있으면 로컬에 복원 (리셋 방지)
+        // 브라우저별 데이터 분리
+        const browserKey = globalState.browserType.toLowerCase();
+        const browserData = firebaseData.browsers?.[browserKey] || {};
+        
+        // 로컬에 복원 (브라우저별 데이터)
         await chrome.storage.local.set({
-          totalVisits: firebaseData.totalVisits || 0,
-          totalTime: firebaseData.totalTime || 0,
-          dailyUsage: firebaseData.dailyUsage || {},
-          monthlyUsage: firebaseData.monthlyUsage || {},
+          totalVisits: browserData.totalVisits || 0,
+          totalTime: browserData.totalTime || 0,
+          dailyUsage: browserData.dailyUsage || {},
+          monthlyUsage: browserData.monthlyUsage || {},
+          // 통합 데이터도 저장 (읽기 전용)
+          combinedTotalVisits: firebaseData.combinedStats?.totalVisits || 0,
+          combinedTotalTime: firebaseData.combinedStats?.totalTime || 0,
           lastSync: firebaseData.lastSync || null
         });
         
-        console.log('Data restored from Firebase:', {
-          totalVisits: firebaseData.totalVisits || 0,
-          totalTime: Math.round((firebaseData.totalTime || 0) / 60000) + ' minutes'
+        console.log(`Data restored from Firebase for ${globalState.browserType}:`, {
+          visits: browserData.totalVisits || 0,
+          time: Math.round((browserData.totalTime || 0) / 60000) + ' minutes',
+          combined: firebaseData.combinedStats
         });
         return true;
       }
     }
     
-    // Firebase에 데이터가 없으면 초기값 설정
+    // 새 사용자 초기화
     await chrome.storage.local.set({
       totalVisits: 0,
       totalTime: 0,
       dailyUsage: {},
       monthlyUsage: {},
+      combinedTotalVisits: 0,
+      combinedTotalTime: 0,
       lastSync: null
     });
     
@@ -98,7 +126,6 @@ async function loadUserDataFromFirebase() {
     
   } catch (error) {
     console.error('Failed to load from Firebase:', error);
-    // 네트워크 오류 시에도 로컬 데이터 유지
     return false;
   }
 }
@@ -118,12 +145,10 @@ function isChatGPTUrl(url) {
 // 시간 추적 시작/중지
 // ─────────────────────────────────────────────
 function startTracking(tabId) {
-  // 이미 추적 중이면 중복 방지
   if (globalState.isTracking && globalState.currentTabId === tabId) {
     return;
   }
 
-  // 이전 세션 종료
   if (globalState.isTracking) {
     stopTracking();
   }
@@ -132,7 +157,7 @@ function startTracking(tabId) {
   globalState.currentTabId = tabId;
   globalState.sessionStartTime = Date.now();
   
-  console.log('Started tracking tab:', tabId);
+  console.log(`Started tracking tab ${tabId} on ${globalState.browserType}`);
 }
 
 async function stopTracking() {
@@ -142,10 +167,9 @@ async function stopTracking() {
 
   const sessionTime = Date.now() - globalState.sessionStartTime;
   
-  // 1초 이상만 기록
   if (sessionTime > 1000) {
     await addTimeToUsage(sessionTime);
-    console.log('Session ended, duration:', Math.round(sessionTime / 1000) + ' seconds');
+    console.log(`Session ended on ${globalState.browserType}, duration:`, Math.round(sessionTime / 1000) + ' seconds');
   }
 
   globalState.isTracking = false;
@@ -154,7 +178,7 @@ async function stopTracking() {
 }
 
 // ─────────────────────────────────────────────
-// 사용 시간 추가 (누적 방지 로직 포함)
+// 사용 시간 추가
 // ─────────────────────────────────────────────
 async function addTimeToUsage(duration) {
   const today = new Date().toISOString().split('T')[0];
@@ -168,19 +192,16 @@ async function addTimeToUsage(duration) {
   const monthlyUsage = data.monthlyUsage || {};
   let totalTime = data.totalTime || 0;
 
-  // 일일 사용량 업데이트
   if (!dailyUsage[today]) {
     dailyUsage[today] = { visits: 0, time: 0 };
   }
   dailyUsage[today].time += duration;
 
-  // 월별 사용량 업데이트
   if (!monthlyUsage[month]) {
     monthlyUsage[month] = { visits: 0, time: 0 };
   }
   monthlyUsage[month].time += duration;
 
-  // 총 시간 업데이트
   totalTime += duration;
 
   await chrome.storage.local.set({
@@ -201,7 +222,6 @@ async function incrementVisit() {
     'dailyUsage', 'monthlyUsage', 'totalVisits', 'lastVisitTime'
   ]);
 
-  // 30초 내 재방문은 카운트하지 않음
   const lastVisitTime = data.lastVisitTime || 0;
   if (Date.now() - lastVisitTime < 30000) {
     return;
@@ -211,19 +231,16 @@ async function incrementVisit() {
   const monthlyUsage = data.monthlyUsage || {};
   let totalVisits = data.totalVisits || 0;
 
-  // 일일 방문 업데이트
   if (!dailyUsage[today]) {
     dailyUsage[today] = { visits: 0, time: 0 };
   }
   dailyUsage[today].visits++;
 
-  // 월별 방문 업데이트
   if (!monthlyUsage[month]) {
     monthlyUsage[month] = { visits: 0, time: 0 };
   }
   monthlyUsage[month].visits++;
 
-  // 총 방문 업데이트
   totalVisits++;
 
   await chrome.storage.local.set({
@@ -233,7 +250,7 @@ async function incrementVisit() {
     lastVisitTime: Date.now()
   });
 
-  console.log('Visit counted. Total visits:', totalVisits);
+  console.log(`Visit counted on ${globalState.browserType}. Total visits:`, totalVisits);
 }
 
 // ─────────────────────────────────────────────
@@ -265,23 +282,6 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
   }
 });
 
-chrome.windows.onFocusChanged.addListener(async (windowId) => {
-  if (windowId === chrome.windows.WINDOW_ID_NONE) {
-    await stopTracking();
-  } else if (globalState.currentTabId) {
-    try {
-      const [activeTab] = await chrome.tabs.query({ active: true, windowId });
-      if (activeTab && isChatGPTUrl(activeTab.url)) {
-        startTracking(activeTab.id);
-      } else {
-        await stopTracking();
-      }
-    } catch (error) {
-      await stopTracking();
-    }
-  }
-});
-
 // ─────────────────────────────────────────────
 // 메시지 처리
 // ─────────────────────────────────────────────
@@ -290,16 +290,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     try {
       switch(request.type) {
         case 'USER_ACTIVITY':
-          // Content script에서 활동 감지
           if (globalState.isTracking) {
-            // 세션 연장
             globalState.sessionStartTime = Date.now();
           }
           sendResponse({ success: true });
           break;
 
         case 'USER_INACTIVE':
-          // 비활성화 시 현재 세션 저장
           if (globalState.isTracking) {
             await stopTracking();
           }
@@ -338,12 +335,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 // ─────────────────────────────────────────────
-// 통계 가져오기
+// 통계 가져오기 (브라우저별 + 통합)
 // ─────────────────────────────────────────────
 async function getStats() {
   const data = await chrome.storage.local.get([
     'userName', 'dailyUsage', 'monthlyUsage', 
-    'totalVisits', 'totalTime', 'lastSync'
+    'totalVisits', 'totalTime', 'lastSync',
+    'combinedTotalVisits', 'combinedTotalTime'
   ]);
 
   // 현재 진행 중인 세션 포함
@@ -352,26 +350,45 @@ async function getStats() {
     currentSessionTime = Date.now() - globalState.sessionStartTime;
   }
 
+  // Firebase에서 다른 브라우저 데이터 가져오기
+  const otherBrowserData = await getOtherBrowserData();
+
   return {
     ...data,
     isTracking: globalState.isTracking,
     currentSessionTime: currentSessionTime,
-    browserInfo: detectBrowser()
+    browserInfo: globalState.browserType,
+    otherBrowserData: otherBrowserData
   };
 }
 
 // ─────────────────────────────────────────────
-// 브라우저 감지
+// 다른 브라우저 데이터 가져오기
 // ─────────────────────────────────────────────
-function detectBrowser() {
-  const userAgent = navigator.userAgent;
-  if (userAgent.includes('Edg')) return 'Edge';
-  if (userAgent.includes('Chrome')) return 'Chrome';
-  return 'Unknown';
+async function getOtherBrowserData() {
+  if (!globalState.userName) return null;
+
+  try {
+    const response = await fetch(
+      `${FIREBASE_CONFIG.databaseURL}/users/${encodeURIComponent(globalState.userName)}/browsers.json`
+    );
+
+    if (response.ok) {
+      const browsersData = await response.json();
+      if (browsersData) {
+        const otherBrowser = globalState.browserType === 'Chrome' ? 'edge' : 'chrome';
+        return browsersData[otherBrowser] || null;
+      }
+    }
+    return null;
+  } catch (error) {
+    console.error('Failed to get other browser data:', error);
+    return null;
+  }
 }
 
 // ─────────────────────────────────────────────
-// Firebase 동기화 (데이터 보존 핵심)
+// Firebase 동기화 (브라우저별 + 통합 데이터)
 // ─────────────────────────────────────────────
 async function syncToFirebase() {
   if (globalState.syncInProgress) {
@@ -385,7 +402,6 @@ async function syncToFirebase() {
     if (globalState.isTracking && globalState.sessionStartTime) {
       const currentTime = Date.now() - globalState.sessionStartTime;
       await addTimeToUsage(currentTime);
-      // 세션 시작 시간 갱신 (중복 계산 방지)
       globalState.sessionStartTime = Date.now();
     }
 
@@ -398,46 +414,59 @@ async function syncToFirebase() {
       throw new Error('Username not set');
     }
 
-    const payload = {
-      userName: data.userName,
-      dailyUsage: data.dailyUsage || {},
-      monthlyUsage: data.monthlyUsage || {},
+    const browserKey = globalState.browserType.toLowerCase();
+    const today = new Date().toISOString().split('T')[0];
+    const todayData = data.dailyUsage?.[today] || { visits: 0, time: 0 };
+
+    // 현재 브라우저 데이터 저장
+    const browserPayload = {
       totalVisits: data.totalVisits || 0,
       totalTime: data.totalTime || 0,
-      lastSync: new Date().toISOString(),
+      dailyUsage: data.dailyUsage || {},
+      monthlyUsage: data.monthlyUsage || {},
       lastActivity: new Date().toISOString(),
-      browserInfo: detectBrowser(),
-      version: "2.0.0"
+      browserInfo: globalState.browserType
     };
 
-    // Firebase에 저장 (PUT으로 완전 덮어쓰기)
-    const response = await fetch(
-      `${FIREBASE_CONFIG.databaseURL}/users/${encodeURIComponent(data.userName)}.json`,
+    // 브라우저별 데이터 저장
+    await fetch(
+      `${FIREBASE_CONFIG.databaseURL}/users/${encodeURIComponent(data.userName)}/browsers/${browserKey}.json`,
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(browserPayload)
       }
     );
 
-    if (!response.ok) {
-      throw new Error(`Firebase error: ${response.status}`);
-    }
+    // 통합 통계 계산 및 저장
+    await updateCombinedStats(data.userName);
 
-    // 오늘 날짜별 데이터도 저장 (대시보드용)
-    const today = new Date().toISOString().split('T')[0];
-    const todayData = data.dailyUsage?.[today] || { visits: 0, time: 0 };
-    
+    // 일별 데이터 저장 (대시보드용)
     await fetch(
-      `${FIREBASE_CONFIG.databaseURL}/daily/${today}/${encodeURIComponent(data.userName)}.json`,
+      `${FIREBASE_CONFIG.databaseURL}/daily/${today}/${encodeURIComponent(data.userName)}/${browserKey}.json`,
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...todayData,
-          userName: data.userName,
           timestamp: new Date().toISOString(),
-          browser: detectBrowser()
+          browser: globalState.browserType
+        })
+      }
+    );
+
+    // 사용자 메타데이터 업데이트
+    await fetch(
+      `${FIREBASE_CONFIG.databaseURL}/users/${encodeURIComponent(data.userName)}/metadata.json`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userName: data.userName,
+          lastSync: new Date().toISOString(),
+          lastActivity: new Date().toISOString(),
+          activeBrowser: globalState.browserType,
+          version: "3.0.0"
         })
       }
     );
@@ -445,9 +474,9 @@ async function syncToFirebase() {
     await chrome.storage.local.set({ lastSync: Date.now() });
     globalState.lastSyncTime = Date.now();
 
-    console.log('Sync successful:', {
-      totalVisits: payload.totalVisits,
-      totalTime: Math.round(payload.totalTime / 60000) + ' minutes'
+    console.log(`Sync successful for ${globalState.browserType}:`, {
+      visits: browserPayload.totalVisits,
+      time: Math.round(browserPayload.totalTime / 60000) + ' minutes'
     });
 
     return { success: true };
@@ -458,6 +487,81 @@ async function syncToFirebase() {
     
   } finally {
     globalState.syncInProgress = false;
+  }
+}
+
+// ─────────────────────────────────────────────
+// 통합 통계 업데이트
+// ─────────────────────────────────────────────
+async function updateCombinedStats(userName) {
+  try {
+    // 모든 브라우저 데이터 가져오기
+    const response = await fetch(
+      `${FIREBASE_CONFIG.databaseURL}/users/${encodeURIComponent(userName)}/browsers.json`
+    );
+
+    if (response.ok) {
+      const browsersData = await response.json() || {};
+      
+      let totalVisits = 0;
+      let totalTime = 0;
+      let dailyCombined = {};
+      let monthlyCombined = {};
+
+      // 각 브라우저 데이터 합산
+      Object.values(browsersData).forEach(browserData => {
+        if (browserData) {
+          totalVisits += browserData.totalVisits || 0;
+          totalTime += browserData.totalTime || 0;
+
+          // 일별 데이터 합산
+          if (browserData.dailyUsage) {
+            Object.keys(browserData.dailyUsage).forEach(date => {
+              if (!dailyCombined[date]) {
+                dailyCombined[date] = { visits: 0, time: 0 };
+              }
+              dailyCombined[date].visits += browserData.dailyUsage[date].visits || 0;
+              dailyCombined[date].time += browserData.dailyUsage[date].time || 0;
+            });
+          }
+
+          // 월별 데이터 합산
+          if (browserData.monthlyUsage) {
+            Object.keys(browserData.monthlyUsage).forEach(month => {
+              if (!monthlyCombined[month]) {
+                monthlyCombined[month] = { visits: 0, time: 0 };
+              }
+              monthlyCombined[month].visits += browserData.monthlyUsage[month].visits || 0;
+              monthlyCombined[month].time += browserData.monthlyUsage[month].time || 0;
+            });
+          }
+        }
+      });
+
+      // 통합 통계 저장
+      await fetch(
+        `${FIREBASE_CONFIG.databaseURL}/users/${encodeURIComponent(userName)}/combinedStats.json`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            totalVisits,
+            totalTime,
+            dailyUsage: dailyCombined,
+            monthlyUsage: monthlyCombined,
+            lastUpdated: new Date().toISOString()
+          })
+        }
+      );
+
+      // 로컬 스토리지 업데이트
+      await chrome.storage.local.set({
+        combinedTotalVisits: totalVisits,
+        combinedTotalTime: totalTime
+      });
+    }
+  } catch (error) {
+    console.error('Failed to update combined stats:', error);
   }
 }
 
@@ -478,7 +582,6 @@ chrome.idle.onStateChanged.addListener(async (state) => {
   if (state === 'idle' || state === 'locked') {
     await stopTracking();
   } else if (state === 'active' && globalState.currentTabId) {
-    // 활성화 시 현재 탭이 ChatGPT인지 확인
     try {
       const tab = await chrome.tabs.get(globalState.currentTabId);
       if (isChatGPTUrl(tab.url)) {

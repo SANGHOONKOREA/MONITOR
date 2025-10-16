@@ -9,6 +9,9 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
   
+  <!-- SheetJS for Excel export -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+  
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     
@@ -85,7 +88,7 @@
       align-items: center;
     }
     
-    .date-range input {
+    .date-range input, .date-range select {
       padding: 8px 12px;
       border: 1px solid #ddd;
       border-radius: 6px;
@@ -115,6 +118,95 @@
       background: #059669;
     }
     
+    .btn-excel {
+      background: #059669;
+    }
+    
+    .btn-excel:hover {
+      background: #047857;
+    }
+    
+    .btn-settings {
+      background: #6b7280;
+    }
+    
+    .btn-settings:hover {
+      background: #4b5563;
+    }
+    
+    /* 사용자 설정 모달 */
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.4);
+    }
+    
+    .modal-content {
+      background-color: #fefefe;
+      margin: 5% auto;
+      padding: 20px;
+      border: 1px solid #888;
+      width: 80%;
+      max-width: 600px;
+      border-radius: 10px;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    
+    .close {
+      color: #aaa;
+      float: right;
+      font-size: 28px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    
+    .close:hover,
+    .close:focus {
+      color: black;
+    }
+    
+    .user-settings-list {
+      margin-top: 20px;
+    }
+    
+    .user-setting-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    
+    .user-setting-item:hover {
+      background: #f9fafb;
+    }
+    
+    .user-info-section {
+      flex: 1;
+      display: flex;
+      gap: 20px;
+      align-items: center;
+    }
+    
+    .team-select {
+      padding: 5px 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    
+    .include-checkbox {
+      width: 20px;
+      height: 20px;
+      cursor: pointer;
+    }
+    
     .table-container {
       background: white;
       border-radius: 10px;
@@ -133,6 +225,12 @@
     .table-title {
       font-size: 18px;
       font-weight: 600;
+    }
+    
+    .table-controls {
+      display: flex;
+      gap: 10px;
+      align-items: center;
     }
     
     .search-box {
@@ -173,18 +271,34 @@
       background: #f9fafb;
     }
     
+    tbody tr.excluded {
+      opacity: 0.5;
+      background: #f3f4f6;
+    }
+    
     .user-name {
       font-weight: 500;
       color: #333;
     }
     
-    .browser-badge {
+    .team-badge {
       display: inline-block;
       padding: 2px 8px;
       border-radius: 12px;
       font-size: 11px;
       font-weight: 500;
       margin-left: 5px;
+      background: #e5e7eb;
+      color: #4b5563;
+    }
+    
+    .browser-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 8px;
+      border-radius: 12px;
+      font-size: 12px;
     }
     
     .browser-chrome {
@@ -195,6 +309,12 @@
     .browser-edge {
       background: #dcfce7;
       color: #166534;
+    }
+    
+    .browser-combined {
+      background: #f3e8ff;
+      color: #6b21a8;
+      font-weight: bold;
     }
     
     .time-value {
@@ -249,13 +369,39 @@
       margin-top: 5px;
     }
     
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
+    .browser-breakdown {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+      font-size: 12px;
     }
     
-    .updating {
-      animation: pulse 1s infinite;
+    .browser-breakdown-item {
+      flex: 1;
+      padding: 5px;
+      background: #f9fafb;
+      border-radius: 5px;
+      text-align: center;
+    }
+    
+    .browser-breakdown-label {
+      color: #666;
+      font-size: 10px;
+    }
+    
+    .browser-breakdown-value {
+      font-weight: bold;
+      margin-top: 2px;
+    }
+    
+    .excluded-indicator {
+      display: inline-block;
+      padding: 2px 6px;
+      background: #ef4444;
+      color: white;
+      border-radius: 4px;
+      font-size: 10px;
+      margin-left: 5px;
     }
   </style>
 </head>
@@ -269,8 +415,8 @@
           <div class="header-stat-label">전체 사용자</div>
         </div>
         <div class="header-stat">
-          <div class="header-stat-value" id="todayActiveUsers">0</div>
-          <div class="header-stat-label">오늘 활성</div>
+          <div class="header-stat-value" id="includedUsers">0</div>
+          <div class="header-stat-label">집계 대상</div>
         </div>
         <div class="header-stat">
           <div class="header-stat-value" id="currentOnline">0</div>
@@ -293,27 +439,61 @@
         <button class="btn" onclick="setThisWeek()">이번주</button>
         <button class="btn" onclick="setThisMonth()">이번달</button>
       </div>
-      <div>
+      <div class="date-range">
+        <label>팀:</label>
+        <select id="teamFilter" onchange="applyTeamFilter()">
+          <option value="all">전체 팀</option>
+          <option value="개발팀">개발팀</option>
+          <option value="기획팀">기획팀</option>
+          <option value="디자인팀">디자인팀</option>
+          <option value="마케팅팀">마케팅팀</option>
+          <option value="영업팀">영업팀</option>
+          <option value="기타">기타</option>
+        </select>
+      </div>
+      <div style="display: flex; gap: 10px;">
+        <button class="btn btn-settings" onclick="openUserSettings()">⚙️ 사용자 설정</button>
+        <button class="btn btn-excel" onclick="exportToExcel()">📊 엑셀 다운로드</button>
         <button class="btn btn-refresh" onclick="loadData()">🔄 새로고침</button>
       </div>
     </div>
 
-    <!-- 요약 카드 -->
+    <!-- 요약 카드 (집계 대상만) -->
     <div class="summary-cards">
       <div class="summary-card">
-        <h3>기간 총 방문</h3>
+        <h3>집계 대상 총 방문</h3>
         <div class="summary-card-value" id="periodVisits">0</div>
         <div class="summary-card-sub">회</div>
+        <div class="browser-breakdown">
+          <div class="browser-breakdown-item">
+            <div class="browser-breakdown-label">Chrome</div>
+            <div class="browser-breakdown-value" id="chromeVisitsSum">0</div>
+          </div>
+          <div class="browser-breakdown-item">
+            <div class="browser-breakdown-label">Edge</div>
+            <div class="browser-breakdown-value" id="edgeVisitsSum">0</div>
+          </div>
+        </div>
       </div>
       <div class="summary-card">
-        <h3>기간 총 시간</h3>
+        <h3>집계 대상 총 시간</h3>
         <div class="summary-card-value" id="periodTime">0</div>
         <div class="summary-card-sub">시간</div>
+        <div class="browser-breakdown">
+          <div class="browser-breakdown-item">
+            <div class="browser-breakdown-label">Chrome</div>
+            <div class="browser-breakdown-value" id="chromeTimeSum">0h</div>
+          </div>
+          <div class="browser-breakdown-item">
+            <div class="browser-breakdown-label">Edge</div>
+            <div class="browser-breakdown-value" id="edgeTimeSum">0h</div>
+          </div>
+        </div>
       </div>
       <div class="summary-card">
         <h3>평균 사용 시간</h3>
         <div class="summary-card-value" id="avgTime">0</div>
-        <div class="summary-card-sub">분/일</div>
+        <div class="summary-card-sub">분/일 (집계 대상)</div>
       </div>
       <div class="summary-card">
         <h3>최다 사용자</h3>
@@ -326,31 +506,56 @@
     <div class="table-container">
       <div class="table-header">
         <div class="table-title">사용자별 현황</div>
-        <input type="text" class="search-box" id="searchBox" 
-               placeholder="사용자 검색..." onkeyup="filterTable()">
+        <div class="table-controls">
+          <input type="text" class="search-box" id="searchBox" 
+                 placeholder="사용자 검색..." onkeyup="filterTable()">
+          <label style="display: flex; align-items: center; gap: 5px;">
+            <input type="checkbox" id="showExcludedToggle" onchange="toggleExcludedUsers()">
+            <span style="font-size: 13px;">제외 사용자 표시</span>
+          </label>
+        </div>
       </div>
       <table>
         <thead>
           <tr>
+            <th>집계</th>
             <th>사용자</th>
-            <th>브라우저</th>
+            <th>팀</th>
             <th>상태</th>
-            <th>오늘 방문</th>
-            <th>오늘 시간</th>
-            <th>기간 방문</th>
-            <th>기간 시간</th>
-            <th>총 누적시간</th>
+            <th>Chrome</th>
+            <th>Edge</th>
+            <th>통합</th>
+            <th>오늘</th>
+            <th>기간 합계</th>
             <th>마지막 활동</th>
           </tr>
         </thead>
         <tbody id="tableBody">
           <tr>
-            <td colspan="9" style="text-align: center; padding: 40px;">
+            <td colspan="10" style="text-align: center; padding: 40px;">
               데이터를 불러오는 중...
             </td>
           </tr>
         </tbody>
       </table>
+    </div>
+  </div>
+
+  <!-- 사용자 설정 모달 -->
+  <div id="userSettingsModal" class="modal">
+    <div class="modal-content">
+      <span class="close" onclick="closeUserSettings()">&times;</span>
+      <h2>사용자 설정</h2>
+      <p style="margin: 10px 0; color: #666; font-size: 14px;">
+        각 사용자의 팀 설정 및 집계 포함 여부를 설정할 수 있습니다.
+      </p>
+      <div class="user-settings-list" id="userSettingsList">
+        <!-- 동적으로 생성됨 -->
+      </div>
+      <div style="margin-top: 20px; text-align: right;">
+        <button class="btn" onclick="saveUserSettings()">저장</button>
+        <button class="btn btn-settings" onclick="closeUserSettings()">취소</button>
+      </div>
     </div>
   </div>
 
@@ -370,11 +575,14 @@
     const db = firebase.database();
 
     let allUsers = {};
-    let dateFilter = { start: null, end: null };
+    let userSettings = {};  // 사용자별 팀, 집계 포함 여부 저장
+    let showExcluded = false;  // 제외된 사용자 표시 여부
 
     // 초기화
     window.onload = () => {
-      // 기본 날짜 설정 (오늘)
+      // 로컬스토리지에서 사용자 설정 로드
+      loadUserSettings();
+      
       const today = new Date();
       document.getElementById('startDate').value = today.toISOString().split('T')[0];
       document.getElementById('endDate').value = today.toISOString().split('T')[0];
@@ -385,13 +593,36 @@
       setInterval(loadData, 5000);
     };
 
+    // 사용자 설정 로드
+    function loadUserSettings() {
+      const saved = localStorage.getItem('chatgptMonitorUserSettings');
+      if (saved) {
+        userSettings = JSON.parse(saved);
+      }
+    }
+
+    // 사용자 설정 저장
+    function saveUserSettingsToLocal() {
+      localStorage.setItem('chatgptMonitorUserSettings', JSON.stringify(userSettings));
+    }
+
     // 데이터 로드
     async function loadData() {
       try {
-        // users 데이터 가져오기
         const snapshot = await db.ref('users').once('value');
         allUsers = snapshot.val() || {};
         
+        // 새로운 사용자를 위한 기본 설정 추가
+        Object.keys(allUsers).forEach(userName => {
+          if (!userSettings[userName]) {
+            userSettings[userName] = {
+              team: '기타',
+              included: true  // 기본적으로 집계에 포함
+            };
+          }
+        });
+        
+        saveUserSettingsToLocal();
         updateDisplay();
       } catch (error) {
         console.error('Data load error:', error);
@@ -403,13 +634,18 @@
       const startDate = document.getElementById('startDate').value;
       const endDate = document.getElementById('endDate').value;
       const searchTerm = document.getElementById('searchBox').value.toLowerCase();
+      const teamFilter = document.getElementById('teamFilter').value;
       const today = new Date().toISOString().split('T')[0];
       
       let totalUsers = 0;
-      let todayActiveUsers = 0;
+      let includedUsers = 0;
       let currentOnline = 0;
       let periodTotalVisits = 0;
       let periodTotalTime = 0;
+      let chromeTotalVisits = 0;
+      let chromeTotalTime = 0;
+      let edgeTotalVisits = 0;
+      let edgeTotalTime = 0;
       let userRows = [];
       
       // 각 사용자 처리
@@ -417,74 +653,129 @@
         const user = allUsers[userName];
         if (!user) return;
         
+        const userSetting = userSettings[userName] || { team: '기타', included: true };
+        
+        // 팀 필터
+        if (teamFilter !== 'all' && userSetting.team !== teamFilter) return;
+        
         // 검색 필터
         if (searchTerm && !userName.toLowerCase().includes(searchTerm)) return;
         
         totalUsers++;
+        if (userSetting.included) includedUsers++;
         
-        // 온라인 상태 체크 (5분 이내 활동)
-        const lastActivity = user.lastActivity ? new Date(user.lastActivity) : null;
+        // 온라인 상태 체크
+        const metadata = user.metadata || {};
+        const lastActivity = metadata.lastActivity ? new Date(metadata.lastActivity) : null;
         const isOnline = lastActivity && (Date.now() - lastActivity.getTime()) < 5 * 60 * 1000;
-        if (isOnline) currentOnline++;
+        if (isOnline && userSetting.included) currentOnline++;
+        
+        // 브라우저별 데이터
+        const chromeData = user.browsers?.chrome || { totalVisits: 0, totalTime: 0, dailyUsage: {} };
+        const edgeData = user.browsers?.edge || { totalVisits: 0, totalTime: 0, dailyUsage: {} };
         
         // 오늘 데이터
-        const todayData = user.dailyUsage?.[today] || { visits: 0, time: 0 };
-        if (todayData.visits > 0) todayActiveUsers++;
+        const todayChrome = chromeData.dailyUsage?.[today] || { visits: 0, time: 0 };
+        const todayEdge = edgeData.dailyUsage?.[today] || { visits: 0, time: 0 };
+        const todayCombined = {
+          visits: todayChrome.visits + todayEdge.visits,
+          time: todayChrome.time + todayEdge.time
+        };
         
         // 기간별 데이터 계산
-        let periodVisits = 0;
-        let periodTime = 0;
+        let periodChromeVisits = 0, periodChromeTime = 0;
+        let periodEdgeVisits = 0, periodEdgeTime = 0;
         
-        if (startDate && endDate && user.dailyUsage) {
+        if (startDate && endDate) {
           const start = new Date(startDate);
           const end = new Date(endDate);
           
-          Object.keys(user.dailyUsage).forEach(date => {
-            const dateObj = new Date(date);
-            if (dateObj >= start && dateObj <= end) {
-              const dayData = user.dailyUsage[date];
-              periodVisits += dayData.visits || 0;
-              periodTime += dayData.time || 0;
-            }
-          });
+          // Chrome 기간 데이터
+          if (chromeData.dailyUsage) {
+            Object.keys(chromeData.dailyUsage).forEach(date => {
+              const dateObj = new Date(date);
+              if (dateObj >= start && dateObj <= end) {
+                const dayData = chromeData.dailyUsage[date];
+                periodChromeVisits += dayData.visits || 0;
+                periodChromeTime += dayData.time || 0;
+              }
+            });
+          }
+          
+          // Edge 기간 데이터
+          if (edgeData.dailyUsage) {
+            Object.keys(edgeData.dailyUsage).forEach(date => {
+              const dateObj = new Date(date);
+              if (dateObj >= start && dateObj <= end) {
+                const dayData = edgeData.dailyUsage[date];
+                periodEdgeVisits += dayData.visits || 0;
+                periodEdgeTime += dayData.time || 0;
+              }
+            });
+          }
         }
         
-        periodTotalVisits += periodVisits;
-        periodTotalTime += periodTime;
+        const periodCombinedVisits = periodChromeVisits + periodEdgeVisits;
+        const periodCombinedTime = periodChromeTime + periodEdgeTime;
+        
+        // 집계 대상만 총계에 포함
+        if (userSetting.included) {
+          periodTotalVisits += periodCombinedVisits;
+          periodTotalTime += periodCombinedTime;
+          chromeTotalVisits += periodChromeVisits;
+          chromeTotalTime += periodChromeTime;
+          edgeTotalVisits += periodEdgeVisits;
+          edgeTotalTime += periodEdgeTime;
+        }
         
         userRows.push({
           name: userName,
-          browser: user.browserInfo || 'Unknown',
+          team: userSetting.team,
+          included: userSetting.included,
           isOnline,
-          todayVisits: todayData.visits || 0,
-          todayTime: todayData.time || 0,
-          periodVisits,
-          periodTime,
-          totalTime: user.totalTime || 0,
-          lastActivity: lastActivity
+          chromeVisits: periodChromeVisits,
+          chromeTime: periodChromeTime,
+          edgeVisits: periodEdgeVisits,
+          edgeTime: periodEdgeTime,
+          todayCombined: todayCombined,
+          periodCombined: {
+            visits: periodCombinedVisits,
+            time: periodCombinedTime
+          },
+          lastActivity: lastActivity,
+          activeBrowser: metadata.activeBrowser || '-'
         });
       });
       
       // 헤더 통계 업데이트
       document.getElementById('totalUsers').textContent = totalUsers;
-      document.getElementById('todayActiveUsers').textContent = todayActiveUsers;
+      document.getElementById('includedUsers').textContent = includedUsers;
       document.getElementById('currentOnline').textContent = currentOnline;
       
-      // 요약 카드 업데이트
+      // 요약 카드 업데이트 (집계 대상만)
       document.getElementById('periodVisits').textContent = periodTotalVisits;
       document.getElementById('periodTime').textContent = formatHours(periodTotalTime);
+      document.getElementById('chromeVisitsSum').textContent = chromeTotalVisits;
+      document.getElementById('edgeVisitsSum').textContent = edgeTotalVisits;
+      document.getElementById('chromeTimeSum').textContent = formatHours(chromeTotalTime);
+      document.getElementById('edgeTimeSum').textContent = formatHours(edgeTotalTime);
       
       const days = Math.max(1, Math.ceil((new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24)) + 1);
-      const avgMinutes = userRows.length > 0 ? Math.round(periodTotalTime / userRows.length / days / 60000) : 0;
+      const includedUserRows = userRows.filter(u => u.included);
+      const avgMinutes = includedUserRows.length > 0 ? 
+        Math.round(periodTotalTime / includedUserRows.length / days / 60000) : 0;
       document.getElementById('avgTime').textContent = avgMinutes;
       
-      // 최다 사용자
-      const topUser = userRows.reduce((max, user) => 
-        user.periodTime > (max?.periodTime || 0) ? user : max, null);
+      // 최다 사용자 (집계 대상 중에서)
+      const topUser = includedUserRows.reduce((max, user) => 
+        user.periodCombined.time > (max?.periodCombined.time || 0) ? user : max, null);
       
       if (topUser) {
         document.getElementById('topUser').textContent = topUser.name;
-        document.getElementById('topUserTime').textContent = formatTime(topUser.periodTime);
+        document.getElementById('topUserTime').textContent = formatTime(topUser.periodCombined.time);
+      } else {
+        document.getElementById('topUser').textContent = '-';
+        document.getElementById('topUserTime').textContent = '-';
       }
       
       // 테이블 업데이트
@@ -493,47 +784,227 @@
 
     // 테이블 업데이트
     function updateTable(userRows) {
-      // 시간순 정렬 (많은 사용자가 위로)
-      userRows.sort((a, b) => b.periodTime - a.periodTime);
+      // 집계 대상 우선, 시간순 정렬
+      userRows.sort((a, b) => {
+        if (a.included !== b.included) return b.included - a.included;
+        return b.periodCombined.time - a.periodCombined.time;
+      });
       
       const tbody = document.getElementById('tableBody');
       tbody.innerHTML = '';
       
       if (userRows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 40px;">데이터가 없습니다</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; padding: 40px;">데이터가 없습니다</td></tr>';
         return;
       }
       
       userRows.forEach(user => {
-        const tr = document.createElement('tr');
+        // 제외된 사용자 표시 여부
+        if (!user.included && !showExcluded) return;
         
-        const browserBadge = user.browser.toLowerCase().includes('edge') ? 
-          '<span class="browser-badge browser-edge">Edge</span>' :
-          user.browser.toLowerCase().includes('chrome') ?
-          '<span class="browser-badge browser-chrome">Chrome</span>' :
-          '';
+        const tr = document.createElement('tr');
+        if (!user.included) tr.className = 'excluded';
         
         const statusIcon = user.isOnline ? 
-          '<span class="status-online">🟢 온라인</span>' : 
-          '<span class="status-offline">⚫ 오프라인</span>';
+          '<span class="status-online">🟢</span>' : 
+          '<span class="status-offline">⚫</span>';
         
         const lastActivityText = user.lastActivity ? 
           formatRelativeTime(user.lastActivity) : '-';
         
+        const includeCheckbox = `<input type="checkbox" ${user.included ? 'checked' : ''} 
+          onchange="toggleUserInclude('${user.name}', this.checked)" 
+          style="width: 20px; height: 20px; cursor: pointer;">`;
+        
         tr.innerHTML = `
-          <td class="user-name">${user.name}</td>
-          <td>${browserBadge}</td>
+          <td style="text-align: center;">${includeCheckbox}</td>
+          <td class="user-name">
+            ${user.name}
+            ${!user.included ? '<span class="excluded-indicator">제외</span>' : ''}
+          </td>
+          <td>
+            <span class="team-badge">${user.team}</span>
+          </td>
           <td>${statusIcon}</td>
-          <td class="visits-value">${user.todayVisits}</td>
-          <td class="time-value">${formatTime(user.todayTime)}</td>
-          <td class="visits-value">${user.periodVisits}</td>
-          <td class="time-value">${formatTime(user.periodTime)}</td>
-          <td><strong>${formatTime(user.totalTime)}</strong></td>
-          <td>${lastActivityText}</td>
+          <td>
+            <div class="browser-item browser-chrome">
+              ${user.chromeVisits}회 / ${formatTime(user.chromeTime)}
+            </div>
+          </td>
+          <td>
+            <div class="browser-item browser-edge">
+              ${user.edgeVisits}회 / ${formatTime(user.edgeTime)}
+            </div>
+          </td>
+          <td>
+            <div class="browser-item browser-combined">
+              ${user.periodCombined.visits}회 / ${formatTime(user.periodCombined.time)}
+            </div>
+          </td>
+          <td class="time-value">${user.todayCombined.visits}회 / ${formatTime(user.todayCombined.time)}</td>
+          <td class="visits-value">${user.periodCombined.visits}회 / ${formatTime(user.periodCombined.time)}</td>
+          <td>${lastActivityText} (${user.activeBrowser})</td>
         `;
         
         tbody.appendChild(tr);
       });
+    }
+
+    // 사용자 집계 포함 토글
+    function toggleUserInclude(userName, included) {
+      if (!userSettings[userName]) {
+        userSettings[userName] = { team: '기타', included: true };
+      }
+      userSettings[userName].included = included;
+      saveUserSettingsToLocal();
+      updateDisplay();
+    }
+
+    // 제외된 사용자 표시 토글
+    function toggleExcludedUsers() {
+      showExcluded = document.getElementById('showExcludedToggle').checked;
+      updateDisplay();
+    }
+
+    // 사용자 설정 모달 열기
+    function openUserSettings() {
+      const modal = document.getElementById('userSettingsModal');
+      const list = document.getElementById('userSettingsList');
+      
+      list.innerHTML = '';
+      
+      // 모든 사용자 목록 생성
+      Object.keys(allUsers).sort().forEach(userName => {
+        const userSetting = userSettings[userName] || { team: '기타', included: true };
+        
+        const item = document.createElement('div');
+        item.className = 'user-setting-item';
+        item.innerHTML = `
+          <div class="user-info-section">
+            <strong>${userName}</strong>
+            <select class="team-select" id="team-${userName}">
+              <option value="개발팀" ${userSetting.team === '개발팀' ? 'selected' : ''}>개발팀</option>
+              <option value="기획팀" ${userSetting.team === '기획팀' ? 'selected' : ''}>기획팀</option>
+              <option value="디자인팀" ${userSetting.team === '디자인팀' ? 'selected' : ''}>디자인팀</option>
+              <option value="마케팅팀" ${userSetting.team === '마케팅팀' ? 'selected' : ''}>마케팅팀</option>
+              <option value="영업팀" ${userSetting.team === '영업팀' ? 'selected' : ''}>영업팀</option>
+              <option value="기타" ${userSetting.team === '기타' ? 'selected' : ''}>기타</option>
+            </select>
+          </div>
+          <label style="display: flex; align-items: center; gap: 5px;">
+            <input type="checkbox" class="include-checkbox" id="include-${userName}" 
+              ${userSetting.included ? 'checked' : ''}>
+            <span>집계 포함</span>
+          </label>
+        `;
+        list.appendChild(item);
+      });
+      
+      modal.style.display = 'block';
+    }
+
+    // 사용자 설정 모달 닫기
+    function closeUserSettings() {
+      document.getElementById('userSettingsModal').style.display = 'none';
+    }
+
+    // 사용자 설정 저장
+    function saveUserSettings() {
+      Object.keys(allUsers).forEach(userName => {
+        const teamSelect = document.getElementById(`team-${userName}`);
+        const includeCheck = document.getElementById(`include-${userName}`);
+        
+        if (teamSelect && includeCheck) {
+          userSettings[userName] = {
+            team: teamSelect.value,
+            included: includeCheck.checked
+          };
+        }
+      });
+      
+      saveUserSettingsToLocal();
+      closeUserSettings();
+      updateDisplay();
+    }
+
+    // 엑셀 다운로드
+    function exportToExcel() {
+      const startDate = document.getElementById('startDate').value;
+      const endDate = document.getElementById('endDate').value;
+      const today = new Date().toISOString().split('T')[0];
+      
+      // 데이터 준비
+      const data = [];
+      
+      Object.keys(allUsers).forEach(userName => {
+        const user = allUsers[userName];
+        if (!user) return;
+        
+        const userSetting = userSettings[userName] || { team: '기타', included: true };
+        const metadata = user.metadata || {};
+        
+        // 브라우저별 데이터
+        const chromeData = user.browsers?.chrome || { totalVisits: 0, totalTime: 0, dailyUsage: {} };
+        const edgeData = user.browsers?.edge || { totalVisits: 0, totalTime: 0, dailyUsage: {} };
+        
+        // 기간별 데이터 계산
+        let periodChromeVisits = 0, periodChromeTime = 0;
+        let periodEdgeVisits = 0, periodEdgeTime = 0;
+        
+        if (startDate && endDate) {
+          const start = new Date(startDate);
+          const end = new Date(endDate);
+          
+          // Chrome 기간 데이터
+          if (chromeData.dailyUsage) {
+            Object.keys(chromeData.dailyUsage).forEach(date => {
+              const dateObj = new Date(date);
+              if (dateObj >= start && dateObj <= end) {
+                const dayData = chromeData.dailyUsage[date];
+                periodChromeVisits += dayData.visits || 0;
+                periodChromeTime += dayData.time || 0;
+              }
+            });
+          }
+          
+          // Edge 기간 데이터
+          if (edgeData.dailyUsage) {
+            Object.keys(edgeData.dailyUsage).forEach(date => {
+              const dateObj = new Date(date);
+              if (dateObj >= start && dateObj <= end) {
+                const dayData = edgeData.dailyUsage[date];
+                periodEdgeVisits += dayData.visits || 0;
+                periodEdgeTime += dayData.time || 0;
+              }
+            });
+          }
+        }
+        
+        data.push({
+          '사용자명': userName,
+          '팀': userSetting.team,
+          '집계 포함': userSetting.included ? 'O' : 'X',
+          'Chrome 방문수': periodChromeVisits,
+          'Chrome 시간(분)': Math.round(periodChromeTime / 60000),
+          'Edge 방문수': periodEdgeVisits,
+          'Edge 시간(분)': Math.round(periodEdgeTime / 60000),
+          '전체 방문수': periodChromeVisits + periodEdgeVisits,
+          '전체 시간(분)': Math.round((periodChromeTime + periodEdgeTime) / 60000),
+          '마지막 활동': metadata.lastActivity ? 
+            new Date(metadata.lastActivity).toLocaleString('ko-KR') : '-'
+        });
+      });
+      
+      // 워크시트 생성
+      const ws = XLSX.utils.json_to_sheet(data);
+      
+      // 워크북 생성
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '사용량 통계');
+      
+      // 파일 다운로드
+      const fileName = `ChatGPT_사용량_${startDate}_${endDate}.xlsx`;
+      XLSX.writeFile(wb, fileName);
     }
 
     // 날짜 필터
@@ -564,6 +1035,10 @@
     }
 
     function applyDateFilter() {
+      updateDisplay();
+    }
+
+    function applyTeamFilter() {
       updateDisplay();
     }
 
