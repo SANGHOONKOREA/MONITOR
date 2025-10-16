@@ -193,7 +193,7 @@ async function addTimeToUsage(duration) {
 // ─────────────────────────────────────────────
 // 방문 횟수 증가
 // ─────────────────────────────────────────────
-async function incrementVisit() {
+async function incrementVisit(force = false) {
   const today = new Date().toISOString().split('T')[0];
   const month = today.substring(0, 7);
 
@@ -201,9 +201,9 @@ async function incrementVisit() {
     'dailyUsage', 'monthlyUsage', 'totalVisits', 'lastVisitTime'
   ]);
 
-  // 30초 내 재방문은 카운트하지 않음
+  // 30초 내 재방문은 카운트하지 않음 (강제 카운트 제외)
   const lastVisitTime = data.lastVisitTime || 0;
-  if (Date.now() - lastVisitTime < 30000) {
+  if (!force && Date.now() - lastVisitTime < 30000) {
     return;
   }
 
@@ -291,9 +291,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       switch(request.type) {
         case 'USER_ACTIVITY':
           // Content script에서 활동 감지
-          if (globalState.isTracking) {
-            // 세션 연장
-            globalState.sessionStartTime = Date.now();
+          if (!globalState.isTracking) {
+            const tabId = sender?.tab?.id;
+            const tabUrl = sender?.tab?.url;
+            if (tabId && isChatGPTUrl(tabUrl)) {
+              startTracking(tabId);
+            }
           }
           sendResponse({ success: true });
           break;
@@ -303,6 +306,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           if (globalState.isTracking) {
             await stopTracking();
           }
+          sendResponse({ success: true });
+          break;
+
+        case 'PROMPT_SUBMITTED':
+          if (sender?.tab?.id && isChatGPTUrl(sender.tab.url)) {
+            startTracking(sender.tab.id);
+          }
+          await incrementVisit(true);
           sendResponse({ success: true });
           break;
 

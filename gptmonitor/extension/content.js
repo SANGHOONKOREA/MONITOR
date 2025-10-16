@@ -102,6 +102,7 @@ async function logPromptActivity() {
   // 활동으로 간주
   handleActivity();
   console.log('ChatGPT 프롬프트 전송 감지');
+  chrome.runtime.sendMessage({ type: 'PROMPT_SUBMITTED' });
 }
 
 // 초기화
